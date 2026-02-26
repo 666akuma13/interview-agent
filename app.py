@@ -15,34 +15,19 @@ QUESTION_BANK_FILE = "question_bank.json"
 SCHEDULES_FILE = "schedules.json"
 ADMIN_PASSWORD = "admin123"  # 👈 change this to your own password
 
-def chat_with_claude(messages):
-    # Ensure messages alternate correctly between user and assistant
-    cleaned = []
-    for msg in messages:
-        if not cleaned:
-            if msg["role"] == "user":
-                cleaned.append(msg)
-        else:
-            if msg["role"] != cleaned[-1]["role"]:
-                cleaned.append(msg)
-            else:
-                # Merge consecutive same-role messages
-                cleaned[-1]["content"] += "\n" + msg["content"]
-    
-    # Must start with user
-    if not cleaned or cleaned[0]["role"] != "user":
-        return ""
-    
+def chat_with_claude(system_prompt, messages):
     response = client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=1024,
-        messages=cleaned
+        system=system_prompt,
+        messages=messages
     )
     return response.content[0].text
 
 def generate_report(transcript, jd_data, round_name="Technical"):
     formatted = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in transcript])
-    prompt = f"You are a senior hiring manager evaluating a {round_name} round interview.\n"
+    system = "You are a senior hiring manager. Evaluate interview transcripts objectively and provide detailed assessments."
+    prompt = f"Evaluate this {round_name} round interview.\n"
     prompt += f"Role: {jd_data['job_title']}\n"
     prompt += f"Technical Skills: {jd_data['technical_skills']}\n"
     prompt += f"Soft Skills: {jd_data['soft_skills']}\n"
@@ -50,7 +35,7 @@ def generate_report(transcript, jd_data, round_name="Technical"):
     prompt += f"TRANSCRIPT:\n{formatted}\n"
     prompt += "Provide scores out of 10 for: Technical Knowledge, Communication, Problem Solving, Confidence, Overall.\n"
     prompt += "List Strengths, Areas for Improvement, Hire Recommendation, and a Summary."
-    return chat_with_claude([{"role": "user", "content": prompt}])
+    return chat_with_claude(system, [{"role": "user", "content": prompt}])
 
 def generate_pdf(candidate_name, role, date, report_text, round_name="Interview"):
     pdf = FPDF()
@@ -206,51 +191,55 @@ class InterviewAgent:
         self.last_question_time = time.time()
         self._initialize_agent()
 
-    def _initialize_agent(self):
-        difficulty = self.jd_data.get("difficulty", "Mid")
-        if difficulty == "Junior":
-            diff_instruction = "Ask basic beginner-friendly questions. Be extra encouraging."
-        elif difficulty == "Senior":
-            diff_instruction = "Ask deep advanced questions. Expect detailed expert-level answers."
-        else:
-            diff_instruction = "Ask moderate questions for a mid-level professional."
-        round_instructions = {
-            "HR Round": "Focus on cultural fit, salary expectations, notice period, and career goals.",
-            "Technical Round": "Focus on technical skills, coding concepts, system design, and problem solving.",
-            "Managerial Round": "Focus on leadership, team management, conflict resolution, and strategic thinking."
-        }
-        round_focus = round_instructions.get(self.round_name, "Cover technical and behavioral questions.")
-        context = f"You are conducting the {self.round_name} of a job interview. "
-        context += f"Candidate: {self.candidate_name}. "
-        context += f"Role: {self.jd_data['job_title']}. "
-        context += f"Technical Skills to assess: {self.jd_data['technical_skills']}. "
-        context += f"Soft Skills to assess: {self.jd_data['soft_skills']}. "
-        context += f"Experience Required: {self.jd_data['experience_required']}. "
-        context += f"Difficulty: {difficulty}. {diff_instruction} "
-        context += f"Round Focus: {round_focus} "
-        if self.custom_questions:
-            context += f"You MUST include these questions: {self.custom_questions}. "
-        context += "Rules: Ask ONE question at a time. Be warm and professional. "
-        context += "Never reveal scores during interview. "
-        context += f"After {self.max_questions} questions wrap up politely. "
-        context += f"Start by greeting {self.candidate_name}, mention this is the {self.round_name}, and ask them to introduce themselves."
-        self.chat_history.append({"role": "user", "content": context})
-        response = chat_with_claude(self.chat_history)
-        self.chat_history.append({"role": "assistant", "content": response})
+def _initialize_agent(self):
+    difficulty = self.jd_data.get("difficulty", "Mid")
+    if difficulty == "Junior":
+        diff_instruction = "Ask basic beginner-friendly questions. Be extra encouraging."
+    elif difficulty == "Senior":
+        diff_instruction = "Ask deep advanced questions. Expect detailed expert-level answers."
+    else:
+        diff_instruction = "Ask moderate questions for a mid-level professional."
+    round_instructions = {
+        "HR Round": "Focus on cultural fit, salary expectations, notice period, and career goals.",
+        "Technical Round": "Focus on technical skills, coding concepts, system design, and problem solving.",
+        "Managerial Round": "Focus on leadership, team management, conflict resolution, and strategic thinking."
+    }
+    round_focus = round_instructions.get(self.round_name, "Cover technical and behavioral questions.")
+    
+    self.system_prompt = f"You are conducting the {self.round_name} of a job interview. "
+    self.system_prompt += f"Candidate: {self.candidate_name}. "
+    self.system_prompt += f"Role: {self.jd_data['job_title']}. "
+    self.system_prompt += f"Technical Skills to assess: {self.jd_data['technical_skills']}. "
+    self.system_prompt += f"Soft Skills to assess: {self.jd_data['soft_skills']}. "
+    self.system_prompt += f"Experience Required: {self.jd_data['experience_required']}. "
+    self.system_prompt += f"Difficulty: {difficulty}. {diff_instruction} "
+    self.system_prompt += f"Round Focus: {round_focus} "
+    if self.custom_questions:
+        self.system_prompt += f"You MUST include these questions: {self.custom_questions}. "
+    self.system_prompt += "Rules: Ask ONE question at a time. Be warm and professional. "
+    self.system_prompt += "Never reveal scores during interview. "
+    self.system_prompt += f"After {self.max_questions} questions wrap up politely. "
+    self.system_prompt += f"Start by greeting {self.candidate_name}, mention this is the {self.round_name}, and ask them to introduce themselves."
+    
+    # Start conversation with opening message
+    opening_prompt = "Begin the interview now by greeting the candidate and asking them to introduce themselves."
+    self.chat_history.append({"role": "user", "content": opening_prompt})
+    response = chat_with_claude(self.system_prompt, self.chat_history)
+    self.chat_history.append({"role": "assistant", "content": response})
 
-    def respond(self, candidate_message):
-        response_time = round(time.time() - self.last_question_time, 1)
-        self.response_times[self.question_count] = response_time
-        self.question_count += 1
-        self.conversation_log.append({"role": "candidate", "content": candidate_message})
-        if self.question_count >= self.max_questions - 1:
-            candidate_message += " [Last question, wrap up professionally]"
-        self.chat_history.append({"role": "user", "content": candidate_message})
-        response = chat_with_claude(self.chat_history)
-        self.chat_history.append({"role": "assistant", "content": response})
-        self.conversation_log.append({"role": "interviewer", "content": response})
-        self.last_question_time = time.time()
-        return response
+def respond(self, candidate_message):
+    response_time = round(time.time() - self.last_question_time, 1)
+    self.response_times[self.question_count] = response_time
+    self.question_count += 1
+    self.conversation_log.append({"role": "candidate", "content": candidate_message})
+    if self.question_count >= self.max_questions - 1:
+        candidate_message += " [Last question, wrap up professionally]"
+    self.chat_history.append({"role": "user", "content": candidate_message})
+    response = chat_with_claude(self.system_prompt, self.chat_history)
+    self.chat_history.append({"role": "assistant", "content": response})
+    self.conversation_log.append({"role": "interviewer", "content": response})
+    self.last_question_time = time.time()
+    return response
 
     def is_interview_complete(self):
         return self.question_count >= self.max_questions
