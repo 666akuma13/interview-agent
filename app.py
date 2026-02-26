@@ -22,8 +22,10 @@ ADMIN_PASSWORD = "admin123"
 def load_all_candidates():
     if os.path.exists(RESULTS_FILE):
         try:
-            with open(RESULTS_FILE, "r") as f: return json.load(f)
-        except: return []
+            with open(RESULTS_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
     return []
 
 def save_candidate_result(candidate_name, jd_data, report, transcript, round_name, anticheat_flags):
@@ -53,22 +55,28 @@ def save_candidate_result(candidate_name, jd_data, report, transcript, round_nam
 def load_question_bank():
     if os.path.exists(QUESTION_BANK_FILE):
         try:
-            with open(QUESTION_BANK_FILE, "r") as f: return json.load(f)
-        except: return {}
+            with open(QUESTION_BANK_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def save_question_bank(bank):
-    with open(QUESTION_BANK_FILE, "w") as f: json.dump(bank, f, indent=2)
+    with open(QUESTION_BANK_FILE, "w") as f:
+        json.dump(bank, f, indent=2)
 
 def load_schedules():
     if os.path.exists(SCHEDULES_FILE):
         try:
-            with open(SCHEDULES_FILE, "r") as f: return json.load(f)
-        except: return []
+            with open(SCHEDULES_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
     return []
 
 def save_schedules(schedules):
-    with open(SCHEDULES_FILE, "w") as f: json.dump(schedules, f, indent=2)
+    with open(SCHEDULES_FILE, "w") as f:
+        json.dump(schedules, f, indent=2)
 
 def generate_interview_token(candidate_name, role, round_name):
     raw = f"{candidate_name}_{role}_{round_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -77,8 +85,10 @@ def generate_interview_token(candidate_name, role, round_name):
 def extract_score(report_text):
     for line in report_text.split("\n"):
         if "Overall" in line and "/10" in line:
-            try: return float(line.split(":")[1].strip().replace("/10", ""))
-            except: return 0
+            try:
+                return float(line.split(":")[1].strip().replace("/10", ""))
+            except:
+                return 0
     return 0
 
 def extract_recommendation(report_text):
@@ -92,10 +102,13 @@ def extract_weaknesses(report_text):
     capture = False
     for line in report_text.split("\n"):
         if "AREAS FOR IMPROVEMENT" in line.upper():
-            capture = True; continue
+            capture = True
+            continue
         if capture:
-            if line.strip().startswith("-"): weaknesses.append(line.strip("- ").strip())
-            elif line.strip() == "" or "HIRE" in line.upper(): break
+            if line.strip().startswith("-"):
+                weaknesses.append(line.strip("- ").strip())
+            elif line.strip() == "" or "HIRE" in line.upper():
+                break
     return weaknesses
 
 def analyze_anticheat(conversation_log):
@@ -119,15 +132,15 @@ def generate_report(transcript, jd_data, round_name):
     prompt += "Provide scores out of 10 for: Technical Knowledge, Communication, Problem Solving, Confidence, Overall.\n"
     prompt += "List Strengths, Areas for Improvement, Hire Recommendation, and a Summary."
     try:
- response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-    temperature=0.7
-)
-return response.choices[0].message.content
-ai_msg = response.choices[0].message.content
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
         )
-        return response.content[0].text
+        return response.choices[0].message.content
     except Exception as e:
         return f"Report generation failed: {str(e)}"
 
@@ -169,29 +182,28 @@ Required Skills: {jd_data.get('technical_skills', 'Python')}
 
 AGENTIC RULES:
 1. REASONING: Before asking a question, briefly evaluate the candidate's last answer.
-2. ADAPTABILITY: If an answer is vague, ask a follow-up 'Why' or 'How' question.
+2. ADAPTABILITY: If an answer is vague, ask a follow-up Why or How question.
 3. FLOW: Connect your questions to what the candidate just said.
 4. TERMINATION: After {self.max_questions} primary topics are covered, politely end the interview.
 
 Style: Professional, inquisitive, and warm. Ask ONE question at a time."""
 
-    def call_claude(self, user_msg):
+    def call_groq(self, user_msg):
         self.chat_history.append({"role": "user", "content": user_msg})
         try:
-           response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=[{"role": "system", "content": self.system_prompt}] + self.chat_history,
-    temperature=0.7
-)
-ai_msg = response.choices[0].message.content
-            ai_msg = response.content[0].text
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "system", "content": self.system_prompt}] + self.chat_history,
+                temperature=0.7
+            )
+            ai_msg = response.choices[0].message.content
             self.chat_history.append({"role": "assistant", "content": ai_msg})
             return ai_msg
         except Exception as e:
             return f"Error: {str(e)}"
 
     def start_interview(self):
-        return self.call_claude(f"Hello, I am {self.candidate_name}. I am ready to start.")
+        return self.call_groq(f"Hello, I am {self.candidate_name}. I am ready to start.")
 
     def handle_response(self, candidate_text):
         self.question_count += 1
@@ -199,7 +211,7 @@ ai_msg = response.choices[0].message.content
         msg = candidate_text
         if self.question_count >= self.max_questions:
             msg += " (This is the final response. Please wrap up the interview now.)"
-        ai_response = self.call_claude(msg)
+        ai_response = self.call_groq(msg)
         self.conversation_log.append({"role": "interviewer", "content": ai_response})
         return ai_response
 
@@ -533,9 +545,12 @@ else:
                 rec_counts = {"Recommended": 0, "Not Recommended": 0, "Hold": 0}
                 for r in all_rounds:
                     rec = extract_recommendation(r["report"])
-                    if "Yes" in str(rec): rec_counts["Recommended"] += 1
-                    elif "No" in str(rec): rec_counts["Not Recommended"] += 1
-                    else: rec_counts["Hold"] += 1
+                    if "Yes" in str(rec):
+                        rec_counts["Recommended"] += 1
+                    elif "No" in str(rec):
+                        rec_counts["Not Recommended"] += 1
+                    else:
+                        rec_counts["Hold"] += 1
                 st.subheader("Hire Recommendation Breakdown")
                 st.plotly_chart(px.pie(values=list(rec_counts.values()), names=list(rec_counts.keys()), color_discrete_sequence=["#2ecc71", "#e74c3c", "#f39c12"]), use_container_width=True)
             else:
