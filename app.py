@@ -195,38 +195,34 @@ def analyze_anticheat(conversation_log, response_times):
     return flags if flags else ["No suspicious activity detected"]
 
 class InterviewAgent:
-....def __init__(self, jd_data, candidate_name, custom_questions, round_name):
-........self.jd_data = jd_data
-........self.candidate_name = candidate_name
-........self.custom_questions = custom_questions
-........self.round_name = round_name
-........self.chat_history = []
-........self.system_prompt = self._generate_system_prompt()
-........
-........# This is where the agent starts
-........self._initialize_agent()
+    def __init__(self, jd_data, candidate_name, custom_questions, round_name):
+        self.jd_data = jd_data
+        self.candidate_name = candidate_name
+        self.custom_questions = custom_questions
+        self.round_name = round_name
+        self.chat_history = []
+        self.system_prompt = self._generate_system_prompt()
+        
+        # Start the agent
+        self._initialize_agent()
 
-....def _generate_system_prompt(self):
-........# Your prompt logic here
-........return f"You are an interviewer..."
+    def _generate_system_prompt(self):
+        # Define the persona for Claude
+        return f"You are an expert interviewer. You are interviewing {self.candidate_name} for a role based on this description: {self.jd_data}."
 
-....def _initialize_agent(self):
-........# Use a user message to start (Required by Anthropic)
-........if not self.chat_history:
-............self.chat_history.append({
-................"role": "user", 
-................"content": "I am ready for the interview."
-............})
-........
-........# This call MUST be inside a function to use 'self'
-........response = chat_with_claude(self.system_prompt, self.chat_history)
-........
-........if response:
-............self.chat_history.append({"role": "assistant", "content": response})
+    def _initialize_agent(self):
+        # Anthropic requires the conversation to start with a 'user' message
+        if not self.chat_history:
+            self.chat_history.append({
+                "role": "user", 
+                "content": f"Hi, I am {self.candidate_name}. Let's start the {self.round_name} interview."
+            })
+        
+        # Call the helper function to talk to Claude
+        response = chat_with_claude(self.system_prompt, self.chat_history)
         
         if response:
             self.chat_history.append({"role": "assistant", "content": response})
-    
     # Now call the API
     response = chat_with_claude(self.system_prompt, self.chat_history)
     
