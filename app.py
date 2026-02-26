@@ -199,10 +199,10 @@ else:
             c_name = st.text_input("Candidate Name")
             c_role = st.text_input("Job Role")
             c_round = st.selectbox("Round Type", ["Technical", "HR", "Managerial"])
-            if st.button("Generate Agentic Link"):
+         if st.button("Generate Agentic Link"):
     new_token = generate_interview_token(c_name, c_role, c_round)
     schedules.append({
-        "candidate_name": c_name, "role": c_role, 
+        "candidate_name": c_name, "role": c_role,
         "round_name": c_round, "token": new_token, "created": str(datetime.now())
     })
     save_schedules(schedules)
