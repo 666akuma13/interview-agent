@@ -201,24 +201,23 @@ class InterviewAgent:
         self.custom_questions = custom_questions
         self.round_name = round_name
         self.chat_history = []
+        # 1. Generate the prompt
         self.system_prompt = self._generate_system_prompt()
-        
-        # Start the agent
+        # 2. Start the conversation
         self._initialize_agent()
 
     def _generate_system_prompt(self):
-        # Define the persona for Claude
-        return f"You are an expert interviewer. You are interviewing {self.candidate_name} for a role based on this description: {self.jd_data}."
+        return f"You are an interviewer for {self.candidate_name}."
 
     def _initialize_agent(self):
-        # Anthropic requires the conversation to start with a 'user' message
+        # This code MUST be indented here (8 spaces) to use 'self'
         if not self.chat_history:
             self.chat_history.append({
                 "role": "user", 
-                "content": f"Hi, I am {self.candidate_name}. Let's start the {self.round_name} interview."
+                "content": "I am ready to start the interview."
             })
         
-        # Call the helper function to talk to Claude
+        # This was likely the line causing your error:
         response = chat_with_claude(self.system_prompt, self.chat_history)
         
         if response:
