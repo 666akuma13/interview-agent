@@ -230,6 +230,17 @@ st.set_page_config(page_title="AI Interview Agent", page_icon="🤖", layout="wi
 token = st.query_params.get("token")
 is_candidate = token is not None
 
+# Hide sidebar completely for candidates
+if is_candidate:
+    st.markdown("""
+        <style>
+            [data-testid="stSidebar"] {display: none;}
+            [data-testid="collapsedControl"] {display: none;}
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+        </style>
+    """, unsafe_allow_html=True)
 # ════════════════════════════════════════════════════
 # CANDIDATE PORTAL
 # ════════════════════════════════════════════════════
