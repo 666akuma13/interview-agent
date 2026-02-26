@@ -1,5 +1,5 @@
 import streamlit as st
-import anthropic
+from groq import Groq
 import json
 import os
 from datetime import datetime
@@ -8,10 +8,10 @@ import hashlib
 import plotly.express as px
 from fpdf import FPDF
 
-if "ANTHROPIC_API_KEY" in st.secrets:
-    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+if "GROQ_API_KEY" in st.secrets:
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
-    st.error("Missing ANTHROPIC_API_KEY. Please add it to your Streamlit Secrets.")
+    st.error("Missing GROQ_API_KEY. Please add it to your Streamlit Secrets.")
     st.stop()
 
 RESULTS_FILE = "candidates.json"
@@ -119,11 +119,13 @@ def generate_report(transcript, jd_data, round_name):
     prompt += "Provide scores out of 10 for: Technical Knowledge, Communication, Problem Solving, Confidence, Overall.\n"
     prompt += "List Strengths, Areas for Improvement, Hire Recommendation, and a Summary."
     try:
-        response = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=1024,
-            system=system,
-            messages=[{"role": "user", "content": prompt}]
+ response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+    temperature=0.7
+)
+return response.choices[0].message.content
+ai_msg = response.choices[0].message.content
         )
         return response.content[0].text
     except Exception as e:
@@ -176,12 +178,12 @@ Style: Professional, inquisitive, and warm. Ask ONE question at a time."""
     def call_claude(self, user_msg):
         self.chat_history.append({"role": "user", "content": user_msg})
         try:
-            response = client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1024,
-                system=self.system_prompt,
-                messages=self.chat_history
-            )
+           response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "system", "content": self.system_prompt}] + self.chat_history,
+    temperature=0.7
+)
+ai_msg = response.choices[0].message.content
             ai_msg = response.content[0].text
             self.chat_history.append({"role": "assistant", "content": ai_msg})
             return ai_msg
