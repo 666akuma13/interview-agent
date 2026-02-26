@@ -401,4 +401,323 @@ else:
             pw = st.text_input("Enter Admin Password", type="password")
             if st.button("Login", use_container_width=True, type="primary"):
                 if pw == ADMIN_PASSWORD:
-                    st.session_state.log
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
+        st.stop()
+
+    col1, col2 = st.columns([8, 1])
+    with col1:
+        st.title("🏢 AI Interview Platform — Admin Panel")
+    with col2:
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.rerun()
+
+    page = st.sidebar.selectbox("📌 Navigation", [
+        "📅 Scheduler",
+        "🎤 Conduct Interview",
+        "📊 Results & Reports",
+        "🔍 Compare Candidates",
+        "📚 Question Bank",
+        "📈 Analytics"
+    ])
+
+    if page == "📅 Scheduler":
+        st.title("📅 Interview Scheduler")
+        st.info("Generate a unique interview link for each candidate. They will only see the interview chat — nothing else.")
+
+        with st.form("schedule_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                c_name = st.text_input("Candidate Full Name")
+                c_role = st.text_input("Job Role", placeholder="e.g. Data Scientist")
+                c_skills = st.text_input("Required Skills", placeholder="e.g. Python, SQL, Machine Learning")
+            with col2:
+                c_round = st.selectbox("Interview Round", ["Technical", "HR", "Managerial"])
+                c_exp = st.text_input("Experience Required", placeholder="e.g. 2 years, Fresher")
+            submitted = st.form_submit_button("🔗 Generate Interview Link", use_container_width=True, type="primary")
+
+        if submitted:
+            if c_name and c_role:
+                schedules = load_schedules()
+                new_token = generate_interview_token(c_name, c_role, c_round)
+                schedules.append({
+                    "candidate_name": c_name,
+                    "role": c_role,
+                    "technical_skills": c_skills,
+                    "experience": c_exp,
+                    "round_name": c_round,
+                    "token": new_token,
+                    "created": str(datetime.now()),
+                    "used": False
+                })
+                save_schedules(schedules)
+                st.success(f"✅ Interview link generated for {c_name}!")
+                st.markdown("**📋 Send this link to the candidate:**")
+                full_link = f"{APP_URL}/?token={new_token}"
+                st.code(full_link)
+                st.caption("The candidate will see only the interview chat. No admin features are visible to them.")
+            else:
+                st.error("Please fill in candidate name and job role.")
+
+        st.divider()
+        st.subheader("All Scheduled Interviews")
+        schedules = load_schedules()
+        if not schedules:
+            st.info("No interviews scheduled yet.")
+        else:
+            for s in reversed(schedules):
+                status = "✅ Completed" if s.get("used") else "⏳ Pending"
+                with st.expander(f"{status} — {s['candidate_name']} — {s['role']} — {s['round_name']} — {s['created'][:10]}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Candidate:** {s['candidate_name']}")
+                        st.markdown(f"**Role:** {s['role']}")
+                        st.markdown(f"**Round:** {s['round_name']}")
+                        st.markdown(f"**Status:** {status}")
+                    with col2:
+                        st.markdown(f"**Skills:** {s.get('technical_skills', 'N/A')}")
+                        st.markdown(f"**Experience:** {s.get('experience', 'N/A')}")
+                        st.markdown(f"**Created:** {s['created'][:16]}")
+                    st.markdown("**Interview Link:**")
+                    st.code(f"{APP_URL}/?token={s['token']}")
+
+    elif page == "🎤 Conduct Interview":
+        st.title("🎤 Conduct Interview Manually")
+        st.caption("Use this to conduct an interview directly in admin view — type the candidate's answers yourself.")
+
+        if "agent" not in st.session_state:
+            with st.form("interview_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    candidate_name = st.text_input("Candidate Name")
+                    job_role = st.text_input("Job Role")
+                with col2:
+                    technical_skills = st.text_input("Technical Skills")
+                    round_name = st.selectbox("Round", ["Technical", "HR", "Managerial"])
+                start = st.form_submit_button("▶️ Start Interview", use_container_width=True, type="primary")
+
+            if start:
+                if not candidate_name or not job_role:
+                    st.error("Please fill in candidate name and job role.")
+                else:
+                    jd_data = {"role": job_role, "technical_skills": technical_skills}
+                    with st.spinner("Setting up interview..."):
+                        agent = InterviewAgent(jd_data, candidate_name, round_name=round_name)
+                        opening = agent.start_interview()
+                    st.session_state.agent = agent
+                    st.session_state.jd_data = jd_data
+                    st.session_state.candidate_name = candidate_name
+                    st.session_state.round_name = round_name
+                    st.session_state.messages = [{"role": "assistant", "content": opening}]
+                    st.session_state.interview_done = False
+                    st.rerun()
+
+        elif not st.session_state.get("interview_done"):
+            st.caption(f"**Candidate:** {st.session_state.candidate_name} | **Role:** {st.session_state.jd_data['role']} | **Round:** {st.session_state.round_name}")
+            progress = min(st.session_state.agent.question_count / 8, 1.0)
+            st.progress(progress, text=f"Question {st.session_state.agent.question_count} of 8")
+
+            for m in st.session_state.messages:
+                with st.chat_message(m["role"]):
+                    st.write(m["content"])
+
+            if st.session_state.agent.is_complete():
+                st.success("Interview Complete!")
+                if st.button("📊 Generate Evaluation Report", type="primary"):
+                    st.session_state.interview_done = True
+                    st.rerun()
+            else:
+                u_input = st.chat_input("Type candidate's answer here...")
+                if u_input:
+                    st.session_state.messages.append({"role": "user", "content": u_input})
+                    with st.spinner("AI is thinking..."):
+                        reply = st.session_state.agent.handle_response(u_input)
+                    st.session_state.messages.append({"role": "assistant", "content": reply})
+                    st.rerun()
+
+        else:
+            st.header("📊 Evaluation Report")
+            with st.spinner("Generating AI evaluation..."):
+                report = generate_report(
+                    st.session_state.agent.get_transcript(),
+                    st.session_state.jd_data,
+                    st.session_state.round_name
+                )
+                anticheat_flags = analyze_anticheat(st.session_state.agent.get_transcript())
+                save_candidate_result(
+                    st.session_state.candidate_name,
+                    st.session_state.jd_data,
+                    report,
+                    st.session_state.agent.get_transcript(),
+                    st.session_state.round_name,
+                    anticheat_flags
+                )
+            st.text(report)
+            st.subheader("🔍 Anti-Cheat Analysis")
+            for flag in anticheat_flags:
+                st.success(flag) if "No suspicious" in flag else st.warning(flag)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button("⬇️ Download TXT", data=report, file_name=f"{st.session_state.candidate_name}_report.txt", mime="text/plain")
+            with col2:
+                pdf_path = generate_pdf(st.session_state.candidate_name, st.session_state.jd_data["role"], datetime.now().strftime("%Y-%m-%d"), report, st.session_state.round_name)
+                with open(pdf_path, "rb") as f:
+                    st.download_button("⬇️ Download PDF", data=f, file_name=f"{st.session_state.candidate_name}_report.pdf", mime="application/pdf")
+            if st.button("🔄 Start New Interview"):
+                for key in list(st.session_state.keys()):
+                    if key != "logged_in":
+                        del st.session_state[key]
+                st.rerun()
+
+    elif page == "📊 Results & Reports":
+        st.title("📊 Results & Reports")
+        all_c = load_all_candidates()
+        if not all_c:
+            st.info("No interview data yet. Candidates need to complete their interviews first.")
+        else:
+            roles = list(set([c["role"] for c in all_c]))
+            col1, col2 = st.columns(2)
+            with col1:
+                filter_role = st.selectbox("Filter by Role", ["All Roles"] + roles)
+            with col2:
+                filter_rec = st.selectbox("Filter by Recommendation", ["All", "Recommended", "Not Recommended", "Hold"])
+            filtered = all_c
+            if filter_role != "All Roles":
+                filtered = [c for c in filtered if c["role"] == filter_role]
+            st.markdown(f"Showing **{len(filtered)}** candidate(s)")
+            st.divider()
+
+            for c in reversed(filtered):
+                rounds = c.get("rounds", [])
+                latest = rounds[-1] if rounds else {}
+                score = extract_score(latest.get("report", ""))
+                rec = extract_recommendation(latest.get("report", ""))
+                badge = "🟢" if "Yes" in str(rec) else ("🔴" if "No" in str(rec) else "🟡")
+                rounds_done = ", ".join([r["round_name"] for r in rounds])
+                with st.expander(f"{badge} {c['candidate_name']} — {c['role']} — {rounds_done} — Score: {score}/10"):
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Overall Score", f"{score}/10")
+                    col2.metric("Rounds Completed", len(rounds))
+                    col3.metric("Recommendation", rec)
+                    st.divider()
+                    for rnd in rounds:
+                        st.markdown(f"### 📋 {rnd['round_name']} — {rnd['date']}")
+                        st.text(rnd["report"])
+                        st.markdown("**🔍 Anti-Cheat Flags:**")
+                        for flag in rnd.get("anticheat_flags", []):
+                            st.success(flag) if "No suspicious" in flag else st.warning(flag)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.download_button("⬇️ TXT", data=rnd["report"], file_name=f"{c['candidate_name']}_{rnd['round_name']}.txt", mime="text/plain", key=f"txt_{c['candidate_name']}_{rnd['round_name']}_{rnd['date']}")
+                        with col2:
+                            pdf_path = generate_pdf(c["candidate_name"], c["role"], rnd["date"], rnd["report"], rnd["round_name"])
+                            with open(pdf_path, "rb") as f:
+                                st.download_button("⬇️ PDF", data=f, file_name=f"{c['candidate_name']}_{rnd['round_name']}.pdf", mime="application/pdf", key=f"pdf_{c['candidate_name']}_{rnd['round_name']}_{rnd['date']}")
+                        if st.checkbox("Show Full Transcript", key=f"ts_{c['candidate_name']}_{rnd['round_name']}_{rnd['date']}"):
+                            for msg in rnd["transcript"]:
+                                label = "🤖 Interviewer" if msg["role"] == "interviewer" else "👤 Candidate"
+                                st.markdown(f"**{label}:** {msg['content']}")
+
+    elif page == "🔍 Compare Candidates":
+        st.title("🔍 Compare Candidates")
+        all_c = load_all_candidates()
+        if len(all_c) < 2:
+            st.info("You need at least 2 interviewed candidates to compare.")
+        else:
+            roles = list(set([c["role"] for c in all_c]))
+            selected_role = st.selectbox("Select Role to Compare", roles)
+            role_candidates = [c for c in all_c if c["role"] == selected_role]
+            if len(role_candidates) < 2:
+                st.warning(f"Only {len(role_candidates)} candidate(s) for this role. Need at least 2.")
+            else:
+                names = [c["candidate_name"] for c in role_candidates]
+                selected_names = st.multiselect("Select Candidates to Compare", names, default=names[:2])
+                selected_candidates = [c for c in role_candidates if c["candidate_name"] in selected_names]
+                if len(selected_candidates) >= 2:
+                    st.divider()
+                    cols = st.columns(len(selected_candidates))
+                    for i, candidate in enumerate(selected_candidates):
+                        rounds = candidate.get("rounds", [])
+                        latest = rounds[-1] if rounds else {}
+                        report = latest.get("report", "")
+                        scores = extract_all_scores(report)
+                        rec = extract_recommendation(report)
+                        badge = "🟢" if "Yes" in str(rec) else ("🔴" if "No" in str(rec) else "🟡")
+                        with cols[i]:
+                            st.markdown(f"### {badge} {candidate['candidate_name']}")
+                            st.markdown(f"**Recommendation:** {rec}")
+                            st.divider()
+                            for cat, score in scores.items():
+                                st.metric(cat, f"{score}/10")
+
+    elif page == "📚 Question Bank":
+        st.title("📚 Question Bank")
+        st.caption("Save must-ask questions per role. These will be used during AI interviews.")
+        bank = load_question_bank()
+        with st.form("qbank_form"):
+            role_key = st.text_input("Role Name", placeholder="e.g. Data Scientist, Backend Developer")
+            qs_input = st.text_area("Questions (one per line)")
+            save_q = st.form_submit_button("💾 Save Questions", use_container_width=True)
+        if save_q:
+            if role_key and qs_input:
+                bank[role_key] = bank.get(role_key, []) + [q.strip() for q in qs_input.split("\n") if q.strip()]
+                save_question_bank(bank)
+                st.success(f"Saved questions for '{role_key}'")
+                st.rerun()
+            else:
+                st.error("Please enter role name and questions.")
+        st.divider()
+        if not bank:
+            st.info("No questions saved yet.")
+        else:
+            for r, qs in bank.items():
+                with st.expander(f"📝 {r} — {len(qs)} questions"):
+                    for q in qs:
+                        st.write(f"- {q}")
+                    if st.button(f"🗑️ Delete all for '{r}'", key=f"del_{r}"):
+                        del bank[r]
+                        save_question_bank(bank)
+                        st.rerun()
+
+    elif page == "📈 Analytics":
+        st.title("📈 Hiring Analytics")
+        all_c = load_all_candidates()
+        if not all_c:
+            st.info("No interview data available yet.")
+        else:
+            all_rounds = [r for c in all_c for r in c.get("rounds", [])]
+            scores = [extract_score(r["report"]) for r in all_rounds if extract_score(r["report"]) > 0]
+            pass_count = sum(1 for r in all_rounds if "Yes" in extract_recommendation(r["report"]))
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Candidates", len(all_c))
+            col2.metric("Total Interviews", len(all_rounds))
+            col3.metric("Avg Score", f"{sum(scores)/len(scores):.1f}/10" if scores else "N/A")
+            col4.metric("Recommended", pass_count)
+            st.divider()
+            if scores:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader("Score Distribution")
+                    st.plotly_chart(px.histogram(x=scores, nbins=10, labels={"x": "Score", "y": "Count"}, color_discrete_sequence=["#4F8BF9"]), use_container_width=True)
+                with col2:
+                    rec_counts = {"Recommended": 0, "Not Recommended": 0, "Hold": 0}
+                    for r in all_rounds:
+                        rec = extract_recommendation(r["report"])
+                        if "Yes" in str(rec): rec_counts["Recommended"] += 1
+                        elif "No" in str(rec): rec_counts["Not Recommended"] += 1
+                        else: rec_counts["Hold"] += 1
+                    st.subheader("Hire Recommendation")
+                    st.plotly_chart(px.pie(values=list(rec_counts.values()), names=list(rec_counts.keys()), color_discrete_sequence=["#2ecc71", "#e74c3c", "#f39c12"]), use_container_width=True)
+                role_scores = {}
+                for c in all_c:
+                    for r in c.get("rounds", []):
+                        s = extract_score(r["report"])
+                        if s > 0:
+                            role_scores.setdefault(c["role"], []).append(s)
+                if role_scores:
+                    st.subheader("Average Score by Role")
+                    avg_by_role = {role: round(sum(s)/len(s), 1) for role, s in role_scores.items()}
+                    st.plotly_chart(px.bar(x=list(avg_by_role.keys()), y=list(avg_by_role.values()), labels={"x": "Role", "y": "Avg Score"}, color_discrete_sequence=["#4F8BF9"]), use_container_width=True)
