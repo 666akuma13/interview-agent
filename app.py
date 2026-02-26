@@ -19,14 +19,25 @@ QUESTION_BANK_FILE = "question_bank.json"
 SCHEDULES_FILE = "schedules.json"
 ADMIN_PASSWORD = "admin123"
 
+# ── IN-MEMORY BACKUP (survives reruns) ──
+if "persistent_schedules" not in st.session_state:
+    st.session_state.persistent_schedules = []
+if "persistent_candidates" not in st.session_state:
+    st.session_state.persistent_candidates = []
+if "persistent_bank" not in st.session_state:
+    st.session_state.persistent_bank = {}
+
 def load_all_candidates():
     if os.path.exists(RESULTS_FILE):
         try:
             with open(RESULTS_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if data:
+                    st.session_state.persistent_candidates = data
+                    return data
         except:
-            return []
-    return []
+            pass
+    return st.session_state.persistent_candidates
 
 def save_candidate_result(candidate_name, jd_data, report, transcript, round_name, anticheat_flags):
     all_results = load_all_candidates()
@@ -49,34 +60,52 @@ def save_candidate_result(candidate_name, jd_data, report, transcript, round_nam
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "rounds": [new_round]
         })
-    with open(RESULTS_FILE, "w") as f:
-        json.dump(all_results, f, indent=2)
+    st.session_state.persistent_candidates = all_results
+    try:
+        with open(RESULTS_FILE, "w") as f:
+            json.dump(all_results, f, indent=2)
+    except:
+        pass
 
 def load_question_bank():
     if os.path.exists(QUESTION_BANK_FILE):
         try:
             with open(QUESTION_BANK_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if data:
+                    st.session_state.persistent_bank = data
+                    return data
         except:
-            return {}
-    return {}
+            pass
+    return st.session_state.persistent_bank
 
 def save_question_bank(bank):
-    with open(QUESTION_BANK_FILE, "w") as f:
-        json.dump(bank, f, indent=2)
+    st.session_state.persistent_bank = bank
+    try:
+        with open(QUESTION_BANK_FILE, "w") as f:
+            json.dump(bank, f, indent=2)
+    except:
+        pass
 
 def load_schedules():
     if os.path.exists(SCHEDULES_FILE):
         try:
             with open(SCHEDULES_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if data:
+                    st.session_state.persistent_schedules = data
+                    return data
         except:
-            return []
-    return []
+            pass
+    return st.session_state.persistent_schedules
 
 def save_schedules(schedules):
-    with open(SCHEDULES_FILE, "w") as f:
-        json.dump(schedules, f, indent=2)
+    st.session_state.persistent_schedules = schedules
+    try:
+        with open(SCHEDULES_FILE, "w") as f:
+            json.dump(schedules, f, indent=2)
+    except:
+        pass
 
 def generate_interview_token(candidate_name, role, round_name):
     raw = f"{candidate_name}_{role}_{round_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
