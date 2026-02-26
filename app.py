@@ -455,7 +455,7 @@ else:
                 save_schedules(schedules)
                 st.success("Interview link generated!")
                 st.markdown("**Send this link to the candidate:**")
-                st.code(f"https://interview-agent-plbbbrhpuubpaixuv2ejgz.streamlit.app/?token={new_token}")
+                st.code(f"https://interview-agent-hdyuwl2pijewxvdbgkw7xu.streamlit.app/?token={new_token}")
             else:
                 st.error("Please enter candidate name and job role.")
 
@@ -471,7 +471,9 @@ else:
                     st.markdown(f"**Role:** {s['role']}")
                     st.markdown(f"**Round:** {s['round_name']}")
                     st.markdown(f"**Status:** {status}")
-                    st.code(f"https://interview-agent-plbbbrhpuubpaixuv2ejgz.streamlit.app/?token={s['token']}")
+                    st.code(f"https://interview-agent-hdyuwl2pijewxvdbgkw7xu.streamlit.app/?token={s['token']}")
+                    
+                    
 
     # ── QUESTION BANK ─────────────────────────────────
     elif page == "Question Bank":
