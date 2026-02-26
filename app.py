@@ -8,22 +8,39 @@ import hashlib
 import plotly.express as px
 from fpdf import FPDF
 
-client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+# Safer initialization of the Anthropic client
+if "ANTHROPIC_API_KEY" in st.secrets:
+    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+else:
+    st.error("Missing ANTHROPIC_API_KEY. Please add it to your Streamlit Secrets.")
+    st.stop()
 
 RESULTS_FILE = "candidates.json"
 QUESTION_BANK_FILE = "question_bank.json"
 SCHEDULES_FILE = "schedules.json"
 ADMIN_PASSWORD = "admin123"  # 👈 change this to your own password
 
-def chat_with_claude(system_prompt, messages):
-    response = client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=messages
-    )
-    return response.content[0].text
+def chat_with_claude(system_prompt, chat_history):
+    """
+    Sends a request to Claude. 
+    system_prompt: The 'persona' of the bot.
+    chat_history: A list of messages like [{'role': 'user', 'content': '...'}]
+    """
+    # Anthropic requires the 'messages' list to NEVER be empty.
+    if not chat_history:
+        chat_history = [{"role": "user", "content": "Let's begin the session."}]
 
+    try:
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022", # Update model if needed
+            max_tokens=1500,
+            system=system_prompt, # This must be a separate parameter
+            messages=chat_history  # This must only contain user/assistant roles
+        )
+        return response.content[0].text
+    except Exception as e:
+        st.error(f"Claude API Error: {e}")
+        return None
 def generate_report(transcript, jd_data, round_name="Technical"):
     formatted = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in transcript])
     system = "You are a senior hiring manager. Evaluate interview transcripts objectively and provide detailed assessments."
@@ -192,37 +209,20 @@ class InterviewAgent:
         self.system_prompt = ""
         self._initialize_agent()
 
-    def _initialize_agent(self):
-        difficulty = self.jd_data.get("difficulty", "Mid")
-        if difficulty == "Junior":
-            diff_instruction = "Ask basic beginner-friendly questions. Be extra encouraging."
-        elif difficulty == "Senior":
-            diff_instruction = "Ask deep advanced questions. Expect detailed expert-level answers."
-        else:
-            diff_instruction = "Ask moderate questions for a mid-level professional."
-        round_instructions = {
-            "HR Round": "Focus on cultural fit, salary expectations, notice period, and career goals.",
-            "Technical Round": "Focus on technical skills, coding concepts, system design, and problem solving.",
-            "Managerial Round": "Focus on leadership, team management, conflict resolution, and strategic thinking."
-        }
-        round_focus = round_instructions.get(self.round_name, "Cover technical and behavioral questions.")
-        self.system_prompt = f"You are conducting the {self.round_name} of a job interview. "
-        self.system_prompt += f"Candidate: {self.candidate_name}. "
-        self.system_prompt += f"Role: {self.jd_data['job_title']}. "
-        self.system_prompt += f"Technical Skills to assess: {self.jd_data['technical_skills']}. "
-        self.system_prompt += f"Soft Skills to assess: {self.jd_data['soft_skills']}. "
-        self.system_prompt += f"Experience Required: {self.jd_data['experience_required']}. "
-        self.system_prompt += f"Difficulty: {difficulty}. {diff_instruction} "
-        self.system_prompt += f"Round Focus: {round_focus} "
-        if self.custom_questions:
-            self.system_prompt += f"You MUST include these questions: {self.custom_questions}. "
-        self.system_prompt += "Rules: Ask ONE question at a time. Be warm and professional. "
-        self.system_prompt += "Never reveal scores during interview. "
-        self.system_prompt += f"After {self.max_questions} questions wrap up politely. "
-        self.system_prompt += f"Start by greeting {self.candidate_name}, mention this is the {self.round_name}, and ask them to introduce themselves."
-        opening_prompt = "Begin the interview now by greeting the candidate and asking them to introduce themselves."
-        self.chat_history.append({"role": "user", "content": opening_prompt})
-        response = chat_with_claude(self.system_prompt, self.chat_history)
+   def _initialize_agent(self):
+    # Ensure there is a 'starter' message from the user
+    # to satisfy Anthropic's requirement that history starts with a 'user' role.
+    if not self.chat_history:
+        self.chat_history.append({
+            "role": "user", 
+            "content": f"Hi, I am {self.candidate_name}. I am ready for the {self.round_name} interview."
+        })
+    
+    # Now call the API
+    response = chat_with_claude(self.system_prompt, self.chat_history)
+    
+    if response:
+        # Add Claude's first question to the history
         self.chat_history.append({"role": "assistant", "content": response})
 
     def respond(self, candidate_message):
