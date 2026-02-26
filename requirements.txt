@@ -1,0 +1,3 @@
+anthropic
+fpdf2
+plotly
