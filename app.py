@@ -189,8 +189,65 @@ class InterviewAgent:
         self.round_name = round_name
         self.response_times = {}
         self.last_question_time = time.time()
+        self.system_prompt = ""
         self._initialize_agent()
 
+    def _initialize_agent(self):
+        difficulty = self.jd_data.get("difficulty", "Mid")
+        if difficulty == "Junior":
+            diff_instruction = "Ask basic beginner-friendly questions. Be extra encouraging."
+        elif difficulty == "Senior":
+            diff_instruction = "Ask deep advanced questions. Expect detailed expert-level answers."
+        else:
+            diff_instruction = "Ask moderate questions for a mid-level professional."
+        round_instructions = {
+            "HR Round": "Focus on cultural fit, salary expectations, notice period, and career goals.",
+            "Technical Round": "Focus on technical skills, coding concepts, system design, and problem solving.",
+            "Managerial Round": "Focus on leadership, team management, conflict resolution, and strategic thinking."
+        }
+        round_focus = round_instructions.get(self.round_name, "Cover technical and behavioral questions.")
+        self.system_prompt = f"You are conducting the {self.round_name} of a job interview. "
+        self.system_prompt += f"Candidate: {self.candidate_name}. "
+        self.system_prompt += f"Role: {self.jd_data['job_title']}. "
+        self.system_prompt += f"Technical Skills to assess: {self.jd_data['technical_skills']}. "
+        self.system_prompt += f"Soft Skills to assess: {self.jd_data['soft_skills']}. "
+        self.system_prompt += f"Experience Required: {self.jd_data['experience_required']}. "
+        self.system_prompt += f"Difficulty: {difficulty}. {diff_instruction} "
+        self.system_prompt += f"Round Focus: {round_focus} "
+        if self.custom_questions:
+            self.system_prompt += f"You MUST include these questions: {self.custom_questions}. "
+        self.system_prompt += "Rules: Ask ONE question at a time. Be warm and professional. "
+        self.system_prompt += "Never reveal scores during interview. "
+        self.system_prompt += f"After {self.max_questions} questions wrap up politely. "
+        self.system_prompt += f"Start by greeting {self.candidate_name}, mention this is the {self.round_name}, and ask them to introduce themselves."
+        opening_prompt = "Begin the interview now by greeting the candidate and asking them to introduce themselves."
+        self.chat_history.append({"role": "user", "content": opening_prompt})
+        response = chat_with_claude(self.system_prompt, self.chat_history)
+        self.chat_history.append({"role": "assistant", "content": response})
+
+    def respond(self, candidate_message):
+        response_time = round(time.time() - self.last_question_time, 1)
+        self.response_times[self.question_count] = response_time
+        self.question_count += 1
+        self.conversation_log.append({"role": "candidate", "content": candidate_message})
+        if self.question_count >= self.max_questions - 1:
+            candidate_message += " [Last question, wrap up professionally]"
+        self.chat_history.append({"role": "user", "content": candidate_message})
+        response = chat_with_claude(self.system_prompt, self.chat_history)
+        self.chat_history.append({"role": "assistant", "content": response})
+        self.conversation_log.append({"role": "interviewer", "content": response})
+        self.last_question_time = time.time()
+        return response
+
+    def is_interview_complete(self):
+        return self.question_count >= self.max_questions
+
+    def get_full_transcript(self):
+        return self.conversation_log
+
+    def get_response_times(self):
+        return self.response_times
+    
 def _initialize_agent(self):
     difficulty = self.jd_data.get("difficulty", "Mid")
     if difficulty == "Junior":
