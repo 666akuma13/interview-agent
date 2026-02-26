@@ -16,10 +16,27 @@ SCHEDULES_FILE = "schedules.json"
 ADMIN_PASSWORD = "admin123"  # 👈 change this to your own password
 
 def chat_with_claude(messages):
+    # Ensure messages alternate correctly between user and assistant
+    cleaned = []
+    for msg in messages:
+        if not cleaned:
+            if msg["role"] == "user":
+                cleaned.append(msg)
+        else:
+            if msg["role"] != cleaned[-1]["role"]:
+                cleaned.append(msg)
+            else:
+                # Merge consecutive same-role messages
+                cleaned[-1]["content"] += "\n" + msg["content"]
+    
+    # Must start with user
+    if not cleaned or cleaned[0]["role"] != "user":
+        return ""
+    
     response = client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=1024,
-        messages=messages
+        messages=cleaned
     )
     return response.content[0].text
 
