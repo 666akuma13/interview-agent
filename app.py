@@ -668,7 +668,7 @@ else:
                     "used": False
                 })
                 save_schedules(schedules)
-           app_url = "https://interview-agent-plbbbrhpuubpaixuv2ejgz.streamlit.app"
+                app_url = "https://interview-agent-plbbbrhpuubpaixuv2ejgz.streamlit.app"
                 full_link = f"{app_url}/?token={token}"
                 st.success("Interview link generated!")
                 st.markdown("**Send this link to the candidate:**")
